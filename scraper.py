@@ -8,11 +8,13 @@ import json
 import logging
 import bs4
 import requests
+import re
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
 OUTPUT_FILE = 'pokemon.json'
+ROOT_URL = "https://serebii.net"
 
 PARSER = argparse.ArgumentParser(description='A Pokémon web scraper')
 PARSER.add_argument('-s', '--save', action='store_true',
@@ -26,60 +28,57 @@ PARSER.add_argument('-v', '--verbose', action='store_true',
 ARGS = PARSER.parse_args()
 
 
-def get_pokemon_data(urls):
-    """
-    Scrape Pokémon data from Serebii.net and output to console.
-    :param urls: URLs to extract the data from.
-    """
+def get_pokemon(urls):
     pokemon_list = []
 
     for url in urls:
-        LOGGER.info('Extracting data from Serebii.net')
-        data = requests.get(url)
+        LOGGER.info('Extracting data from Serebii.net url {}'.format(url))
+        data = requests.get(ROOT_URL+url)
         soup = bs4.BeautifulSoup(data.text, 'html.parser')
-        try:
-            all_divs = soup.find_all('div', attrs={'align': 'center'})
-            center_panel_info = all_divs[1].findAll('td', {'class': 'fooinfo'})
-        except Exception:
-            LOGGER.error(
-                'There was an error trying to identify HTML elements on the webpage.')
-            raise
-
-        pokemon = dict()
-        pokemon['name'] = center_panel_info[1].text
-        pokemon['number'] = center_panel_info[3].text
-        pokemon['classification'] = center_panel_info[4].text
-        pokemon['height'] = (center_panel_info[5].text).split('\r\n\t\t\t')
-        pokemon['weight'] = (center_panel_info[6].text).split('\r\n\t\t\t')
-
-        try:
-            base_stats_table = soup.find(
-                'a', attrs={'name': 'stats'}).find_next('table')
-            base_stats_td = base_stats_table.findAll('td')
-        except Exception:
-            LOGGER.error(
-                'There was an error trying to identify HTML elements on the webpage.')
-            raise
-
-        pokemon['hit_points'] = int(base_stats_td[8].text)
-        pokemon['attack'] = int(base_stats_td[9].text)
-        pokemon['defense'] = int(base_stats_td[10].text)
-        pokemon['special'] = int(base_stats_td[11].text)
-        pokemon['speed'] = int(base_stats_td[12].text)
 
         if not ARGS.save or ARGS.verbose:
             print_pokemon_data(pokemon)
-        LOGGER.info('Adding %s %s to dataset',
-                    pokemon['number'], pokemon['name'])
-        pokemon_list.append(pokemon)
+            LOGGER.info('Adding %s %s to dataset', pokemon['number'], pokemon['name'])
+            pokemon_list.append(pokemon)
 
     if ARGS.save:
         LOGGER.info('Saving to %s', OUTPUT_FILE)
         save_to_json(pokemon_list)
     else:
-        LOGGER.info(
-            'All Pokémon retrieved! To save to JSON, use the --save flag')
+        LOGGER.info( 'All Pokémon retrieved! To save to JSON, use the --save flag')
 
+
+def get_pokemon_data(pokemonSoup):
+    try:
+        dextables = soup.select('table[class="dextable"]')
+        pokemon_info = dextables[1].select('td[class="fooinfo"]')
+
+    except Exception:
+        LOGGER.error(
+            'There was an error trying to identify HTML elements on the webpage.')
+        raise
+
+    pokemon = dict()
+    pokemon['name'] =              pokemon_info[0].text
+    pokemon['number'] =            pokemon_info[2].select('td')[1].text
+    pokemon['classification'] =    pokemon_info[4].text
+    pokemon['height'] =            (pokemon_info[5].text).split('\r\n\t\t\t')
+    pokemon['weight'] =            (pokemon_info[6].text).split('\r\n\t\t\t')
+
+    try:
+        base_stats = soup.find('td', text=re.compile("Base Stats - Total:.*")).parent.select('td[class="fooinfo"]')
+    except Exception:
+        LOGGER.error(
+            'There was an error trying to identify HTML elements on the webpage.')
+        raise
+
+    pokemon['hit_points'] = int(base_stats[1].text)
+    pokemon['attack'] = int(base_stats[2].text)
+    pokemon['defense'] = int(base_stats[3].text)
+    pokemon['special'] = int(base_stats[4].text)
+    pokemon['speed'] = int(base_stats[5].text)
+
+    return pokemon
 
 def save_to_json(pokemon_list):
     """
@@ -107,11 +106,22 @@ def print_pokemon_data(pokemon):
     print('Speed\t\t', pokemon['speed'])
 
 
+def getPokemonUrlsForPokedex():
+    urls = None
+    pokedex = requests.get(ROOT_URL+ '/pokedex-swsh')
+    soup = bs4.BeautifulSoup(pokedex.text,'html.parser')
+    urls = list(set([(opt.attrs['value']) for opt in soup.select('option[value*="pokedex-swsh"]')]))
+    return urls
+
 if __name__ == '__main__':
     try:
-        URLS = ['https://serebii.net/pokedex/{}.shtml'.format(str(x).zfill(3))
-                for x in range(ARGS.first, ARGS.last + 1)]
-        get_pokemon_data(URLS)
+        urls = getPokemonUrlsForPokedex()
+        get_pokemon(urls)
     except Exception as ex:
         LOGGER.error(ex)
         raise
+
+def test_method():
+    soup = bs4.BeautifulSoup(open('test-hitmontop.html','r'),'html.parser')
+    pokemon = get_pokemon_data(soup)
+    print_pokemon_data(pokemon)

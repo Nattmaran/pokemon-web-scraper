@@ -9,6 +9,7 @@ import logging
 import bs4
 import requests
 import re
+import html5lib
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -32,9 +33,13 @@ def get_pokemon(urls):
     pokemon_list = []
 
     for url in urls:
-        LOGGER.info('Extracting data from Serebii.net url {}'.format(url))
+        LOGGER.info('Extracting data from Serebii.net url {}'.format(ROOT_URL+url))
         data = requests.get(ROOT_URL+url)
-        soup = bs4.BeautifulSoup(data.text, 'html.parser')
+        soup = bs4.BeautifulSoup(data.text, 'html5lib')
+        try:
+            pokemon = get_pokemon_data(soup)
+        except Exception:
+            LOGGER.error('Skipping pokemon with url {}'.format(url))
 
         if not ARGS.save or ARGS.verbose:
             print_pokemon_data(pokemon)
@@ -50,33 +55,32 @@ def get_pokemon(urls):
 
 def get_pokemon_data(pokemonSoup):
     try:
-        dextables = soup.select('table[class="dextable"]')
+        dextables = pokemonSoup.select('table[class="dextable"]')
         pokemon_info = dextables[1].select('td[class="fooinfo"]')
 
+
+        pokemon = dict()
+        pokemon['name'] =              pokemon_info[0].text
+        pokemon['number'] =            pokemon_info[2].select('td')[1].text
+        pokemon['classification'] =    pokemon_info[4].text
+        pokemon['height'] =            (pokemon_info[5].text).split('\r\n\t\t\t')
+        pokemon['weight'] =            (pokemon_info[6].text).split('\r\n\t\t\t')
+
+        try:
+            base_stats = pokemonSoup.find('td', text=re.compile("Base Stats - Total:.*")).parent.select('td[class="fooinfo"]')
+        except Exception:
+            LOGGER.error('There was an error trying to identify HTML elements on the webpage.')
+
+        pokemon['hit_points'] = int(base_stats[1].text)
+        pokemon['attack'] = int(base_stats[2].text)
+        pokemon['defense'] = int(base_stats[3].text)
+        pokemon['special'] = int(base_stats[4].text)
+        pokemon['speed'] = int(base_stats[5].text)
+
     except Exception:
         LOGGER.error(
             'There was an error trying to identify HTML elements on the webpage.')
         raise
-
-    pokemon = dict()
-    pokemon['name'] =              pokemon_info[0].text
-    pokemon['number'] =            pokemon_info[2].select('td')[1].text
-    pokemon['classification'] =    pokemon_info[4].text
-    pokemon['height'] =            (pokemon_info[5].text).split('\r\n\t\t\t')
-    pokemon['weight'] =            (pokemon_info[6].text).split('\r\n\t\t\t')
-
-    try:
-        base_stats = soup.find('td', text=re.compile("Base Stats - Total:.*")).parent.select('td[class="fooinfo"]')
-    except Exception:
-        LOGGER.error(
-            'There was an error trying to identify HTML elements on the webpage.')
-        raise
-
-    pokemon['hit_points'] = int(base_stats[1].text)
-    pokemon['attack'] = int(base_stats[2].text)
-    pokemon['defense'] = int(base_stats[3].text)
-    pokemon['special'] = int(base_stats[4].text)
-    pokemon['speed'] = int(base_stats[5].text)
 
     return pokemon
 
@@ -109,9 +113,14 @@ def print_pokemon_data(pokemon):
 def getPokemonUrlsForPokedex():
     urls = None
     pokedex = requests.get(ROOT_URL+ '/pokedex-swsh')
-    soup = bs4.BeautifulSoup(pokedex.text,'html.parser')
-    urls = list(set([(opt.attrs['value']) for opt in soup.select('option[value*="pokedex-swsh"]')]))
+    soup = bs4.BeautifulSoup(pokedex.text,'html5lib')
+    urls = list(set([(opt.attrs['value']) for opt in soup.find_all('option',value=re.compile('^/pokedex-swsh/[a-z]*/$'))]))
     return urls
+
+def test_method():
+    soup = bs4.BeautifulSoup(open('test-hitmontop.html','r'),'html5lib')
+    pokemon = get_pokemon_data(soup)
+    print_pokemon_data(pokemon)
 
 if __name__ == '__main__':
     try:
@@ -120,8 +129,3 @@ if __name__ == '__main__':
     except Exception as ex:
         LOGGER.error(ex)
         raise
-
-def test_method():
-    soup = bs4.BeautifulSoup(open('test-hitmontop.html','r'),'html.parser')
-    pokemon = get_pokemon_data(soup)
-    print_pokemon_data(pokemon)

@@ -34,10 +34,9 @@ def get_pokemon(urls):
 
     for url in urls:
         LOGGER.info('Extracting data from Serebii.net url {}'.format(ROOT_URL+url))
-        data = requests.get(ROOT_URL+url)
-        soup = bs4.BeautifulSoup(data.text, 'html5lib')
+        pokemon_html = requests.get(ROOT_URL+url).text
         try:
-            pokemon = get_pokemon_data(soup)
+            pokemon = get_pokemon_data(pokemon_hmtl)
         except Exception:
             LOGGER.error('Skipping pokemon with url {}'.format(url))
 
@@ -53,7 +52,8 @@ def get_pokemon(urls):
         LOGGER.info( 'All Pokémon retrieved! To save to JSON, use the --save flag')
 
 
-def get_pokemon_data(pokemonSoup):
+def get_pokemon_data(pokemon_hmtl):
+    pokemonSoup = bs4.BeautifulSoup(pokemon_hmtl, 'html5lib')
     try:
         dextables = pokemonSoup.select('table[class="dextable"]')
         pokemon_info = dextables[1].select('td[class="fooinfo"]')
@@ -66,10 +66,7 @@ def get_pokemon_data(pokemonSoup):
         pokemon['height'] =            (pokemon_info[5].text).split('\r\n\t\t\t')
         pokemon['weight'] =            (pokemon_info[6].text).split('\r\n\t\t\t')
 
-        try:
-            base_stats = pokemonSoup.find('td', text=re.compile("Base Stats - Total:.*")).parent.select('td[class="fooinfo"]')
-        except Exception:
-            LOGGER.error('There was an error trying to identify HTML elements on the webpage.')
+        base_stats = pokemonSoup.find('td', text=re.compile("Base Stats - Total:.*")).parent.select('td[class="fooinfo"]')
 
         pokemon['hit_points'] = int(base_stats[1].text)
         pokemon['attack'] = int(base_stats[2].text)
@@ -77,11 +74,32 @@ def get_pokemon_data(pokemonSoup):
         pokemon['special'] = int(base_stats[4].text)
         pokemon['speed'] = int(base_stats[5].text)
 
+
+        #standard level attacks
+        attacks = pokemonSoup.select_one('a[name="standardlevel"]').parent.parent.parent.parent.select('td[class="fooinfo"] a[href*="attackdex"]')
+        pokemon_attacks = []
+        for attack in attacks:
+            attack_info = attack.parent.parent.select('td')
+            try:
+                attack = dict()
+                attack['name'] = attack_info[1].text
+                attack['type'] = attack_info[2].find('img')['src'].split('/')[-1].split('.')[0]
+                attack['contact'] = attack_info[3].find('img')['src'].split('/')[-1].split('.')[0]
+                attack['attack'] = attack_info[4].text
+                attack['acc'] = attack_info[5].text
+                attack['pp'] = attack_info[6].text
+                attack['effect'] = attack_info[7].text
+                pokemon_attacks.append(attack)
+            except Exception:
+                LOGGER.error(attack_info)
+
+        pokemon['attacks'] = pokemon_attacks
     except Exception:
         LOGGER.error(
             'There was an error trying to identify HTML elements on the webpage.')
         raise
 
+    print_pokemon_data(pokemon)
     return pokemon
 
 def save_to_json(pokemon_list):
@@ -108,6 +126,8 @@ def print_pokemon_data(pokemon):
     print('Defense\t\t', pokemon['defense'])
     print('Special\t\t', pokemon['special'])
     print('Speed\t\t', pokemon['speed'])
+    for attack in pokemon['attacks']:
+        print(attack)
 
 
 def getPokemonUrlsForPokedex():

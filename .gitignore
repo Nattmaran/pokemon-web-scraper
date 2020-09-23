@@ -108,3 +108,7 @@ venv.bak/
 
 # Project-specific
 pokemon.json
+
+# ctags
+tags
+

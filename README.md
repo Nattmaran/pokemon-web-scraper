@@ -1,7 +1,8 @@
 # Pokémon Web Scraper
 
 A little Python CLI application that scrapes Serebii.net. Mostly made for my [Vue Pokédex](https://github.com/shadforth/vue-pokedex) project.
-
+HEJ HEJ
+FINA FISKEN
 ![](./assets/pokemon-web-scraper-screenshot.png)
 
 ## Getting started

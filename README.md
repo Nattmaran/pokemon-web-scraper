@@ -1,4 +1,4 @@
-# Pokémon Web Scraper
+# Pokémon Web Scraper [forkad]
 
 A little Python CLI application that scrapes Serebii.net. Mostly made for my [Vue Pokédex](https://github.com/shadforth/vue-pokedex) project.
 
